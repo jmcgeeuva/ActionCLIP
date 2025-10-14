@@ -519,3 +519,153 @@ class EducationBBDataset(data.Dataset):
 
     def __len__(self):
         return len(self.video_list)
+
+
+
+class UCF10124Dataset(data.Dataset):
+    def __init__(self,
+                 root: str,
+                 gt_pkl: str,
+                 split: str = "train",
+                 clip_len: int = 8,
+                 transforms = None):
+        """
+        Args:
+          root: root directory for “ucf101_24” data (contains rgb-images, brox-images).
+          gt_pkl: path to UCF101v2-GT.pkl file.
+          split: “train” or “test”.
+          clip_len: number of frames to sample in a clip.
+          transforms: transforms to apply on PIL images (or on stacked frames).
+        """
+        self.root = root
+        self.clip_len = clip_len
+        self.transforms = transforms
+
+        # Load the GT pickle
+        data = pd.read_pickle(gt_pkl) #'/standard/spencerNSF/VIVA/mmaction2/tools/data/ucf101_24/UCF101_v2/UCF101v2-GT.pkl')
+
+        self.classes = [(i,c) for i, c in enumerate(data['labels'])]            # list of 24 class names
+        self.labels = data['labels']
+        self.gttubes = data['gttubes']          # dict: video → list of tubes
+        self.nframes = data['nframes']          # dict: video → number of frames
+        self.resolution = data['resolution']    # dict: video → (h, w)
+        # train_videos/test_videos are lists-of-lists (nsplits)
+        self.train_videos = data['train_videos']
+        self.test_videos = data['test_videos']
+
+        # Choose which split
+        if split == "train":
+            video_list = self.train_videos[0]  # first split
+        else:
+            video_list = self.test_videos[0]
+
+        self.video_list = video_list
+
+    def __len__(self):
+        return len(self.video_list)
+
+    def __getitem__(self, idx):
+        """
+        Returns:
+          frames: Tensor [T, C, H, W]
+          target: dict with keys:
+             - "boxes": list of length T, each is Tensor [n_objs, 4]
+             - "labels": list of length T, each is Tensor [n_objs] (index into 0..23)
+             - "video": video id (string)
+        """
+        vid = self.video_list[idx]  # e.g. "Basketball/v_Basketball_g01_c01"
+        # number of frames in this video
+        num_f = self.nframes[vid]
+        # load all gttubes for this video (possibly multiple action instances)
+        # Each tube is shape (n_frames, 5): [frame_idx, x1, y1, x2, y2]
+        tubes = self.gttubes[vid][list(self.gttubes[vid].keys())[0]][0]
+
+        # Sample a clip of length clip_len (you can do random or uniform)
+        # For simplicity, pick first `clip_len` frames
+        # Alternatively, pick a random contiguous segment
+        start = 0
+        end = min(len(tubes[:, 0].tolist()), self.clip_len)
+        frame_indices = list(range(start, end))
+        # raise ValueError(end, len(frame_indices), tubes.shape, len(tubes[:, 0].tolist()))
+        # frame_indices = tubes[:, 0].tolist()
+
+        frames = []
+        # Prepare per-frame boxes & labels
+        boxes_list = []
+        labels_list = []
+        for t in frame_indices:
+            # Load image
+            # Frame file names are zero-padded, e.g. “00001.jpg”
+            img_path = os.path.join(self.root, "rgb-images", vid, f"{int(tubes[:, 0].tolist()[t]):05d}.jpg")
+            img = Image.open(img_path).convert("RGB")
+            frames.append(img)
+
+            # Collect all boxes for this frame from all tubes
+            all_boxes = []
+            all_labels = []
+            tube = tubes[t, :]
+            # for tube in tubes:
+            #     # tube is (n_frames, 5). We find if tube has an entry with frame_idx == t
+            #     # Note: tube[:,0] are the frame indices
+            #     # Option: assume tubes are ordered by frame
+            #     # You might do a mask:
+            # import pdb; pdb.set_trace()
+            # mask = tube #(tube[:,0] == t)
+            # if mask.any():
+            # row = tube[mask][0]  # one row with [t, x1, y1, x2, y2]
+            x1, y1, x2, y2 = tube[1], tube[2], tube[3], tube[4]
+            all_boxes.append([x1, y1, x2, y2])
+            # label is determined by which tube this is => tube index in tubes list
+            label = self.labels.index(vid.split('/')[0])
+            all_labels.append(label)
+            if len(all_boxes) > 0:
+                boxes_list.append(torch.tensor(all_boxes, dtype=torch.float32))
+                labels_list.append(torch.tensor(all_labels, dtype=torch.int64))
+            else:
+                boxes_list.append(torch.zeros((0,4), dtype=torch.float32))
+                labels_list.append(torch.zeros((0,), dtype=torch.int64))
+
+        if len(frame_indices) < self.clip_len:
+            for i in range(self.clip_len-len(frame_indices)):
+                frames.append(frames[-1])
+                boxes_list.append(boxes_list[-1])
+                labels_list.append(labels_list[-1])
+
+        # Stack frames: resulting shape [T, C, H, W]
+        # frames = torch.stack(frames, dim=0)
+
+        cropped_images = []
+        # import pdb; pdb.set_trace()
+        for i, box in enumerate(boxes_list):
+            x0, y0, x1, y1 = box[0].tolist()
+            cropped_images.append(
+                frames[i].crop((
+                    int(np.floor(int(x0))), 
+                    int(np.ceil (int(y0))), 
+                    int(np.floor(int(x1))), 
+                    int(np.ceil (int(y1)))
+                ))
+            )
+
+        process_data = []
+        aug_images = []
+        # for img, img_cropped in zip(frames, cropped_images):
+        #     if self.transforms:
+        data = {'video': cropped_images, 'mask': None}
+        data = self.transforms(data)
+        process_data, image_masks = data['video'], data['mask']
+        
+        data = {'video': frames, 'mask': None}
+        data = self.transforms(data)
+        aug_images, image_masks = data['video'], data['mask']
+
+        nonaug_images = [transforms.ToTensor()(image) for image in frames]
+        nonaug_images = torch.stack(nonaug_images)
+
+        target = {
+            "boxes": boxes_list,
+            "labels": labels_list,
+            "video": vid,
+        }
+
+        return process_data, aug_images, torch.stack(boxes_list).squeeze(dim=1), nonaug_images, vid, int(labels_list[0])

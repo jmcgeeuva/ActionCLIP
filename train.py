@@ -4,7 +4,7 @@
 
 import os
 import torch.nn as nn
-from datasets import EducationBBDataset
+from datasets import EducationBBDataset, UCF10124Dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import wandb
@@ -179,6 +179,242 @@ def run_florence(aug_images, processor, model, real_texts, config, caption=True,
 
 ############################ FLORENCE ###############################
 
+
+def run_with_loss_type(
+                        lambda_enbb,
+                        lambda_enff,
+                        lambda_ff,
+                        lambda_bb,
+                        texts,
+                        ff_video,
+                        bb_video,
+                        b,
+                        c,
+                        h,
+                        w,
+                        t,
+                        logit_scale,
+                        ground_truth,
+                        bounded_texts,
+                        config,
+):
+    if lambda_enbb > 0 and lambda_enff > 0:
+        # ffimg bbimg fftxt bbtxt
+        if lambda_ff > 0 and lambda_bb > 0:
+            ff_gen_text_embedding = ff_text_clip(texts)
+            ff_video_tensor = ff_video.view(-1,c,h,w )
+            ff_image_embedding = ff_image_clip(ff_video_tensor)
+            ff_image_embedding = ff_image_embedding.view(b,t,-1)
+            ff_image_embedding = ff_temp_trans(ff_image_embedding)
+            ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
+            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
+            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
+
+            bb_gen_text_embedding = ff_text_clip(bounded_texts)
+            bb_video_tensor = bb_video.view(-1,c,h,w )
+            bb_image_embedding = ff_image_clip(bb_video_tensor)
+            bb_image_embedding = bb_image_embedding.view(b,t,-1)
+            bb_image_embedding = ff_temp_trans(bb_image_embedding)
+            bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
+            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+
+            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
+        
+        # ffimg fftxt bbtxt
+        elif lambda_ff > 0:
+            ff_gen_text_embedding = ff_text_clip(texts)
+            ff_video_tensor = ff_video.view(-1,c,h,w )
+            ff_image_embedding = ff_image_clip(ff_video_tensor)
+            ff_image_embedding = ff_image_embedding.view(b,t,-1)
+            ff_image_embedding = ff_temp_trans(ff_image_embedding)
+            ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
+            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
+            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
+
+            image_embedding = ff_image_embedding
+
+            bb_gen_text_embedding = ff_text_clip(bounded_texts)
+            bb_logits_per_image, bb_logits_per_text = create_logits(image_embedding,bb_gen_text_embedding,logit_scale)
+            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+
+
+            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
+        # bbimg fftxt bbtxt
+        elif lambda_bb > 0:
+            bb_gen_text_embedding = ff_text_clip(bounded_texts)
+            bb_video_tensor = bb_video.view(-1,c,h,w )
+            bb_image_embedding = ff_image_clip(bb_video_tensor)
+            bb_image_embedding = bb_image_embedding.view(b,t,-1)
+            bb_image_embedding = ff_temp_trans(bb_image_embedding)
+            bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
+            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+
+            image_embedding = bb_image_embedding
+            
+            ff_gen_text_embedding = ff_text_clip(texts)
+            ff_logits_per_image, ff_logits_per_text = create_logits(image_embedding,ff_gen_text_embedding,logit_scale)
+            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
+            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
+
+
+            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
+        else: 
+            raise ValueError("Error!")
+    elif lambda_enff > 0:
+        # ffimg bbimg fftxt
+        if lambda_ff > 0 and lambda_bb > 0:
+            
+            ff_gen_text_embedding = ff_text_clip(texts)
+            ff_video_tensor = ff_video.view(-1,c,h,w )
+            ff_image_embedding = ff_image_clip(ff_video_tensor)
+            ff_image_embedding = ff_image_embedding.view(b,t,-1)
+            ff_image_embedding = ff_temp_trans(ff_image_embedding)
+            ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
+            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
+            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
+
+            if use_generic:
+                text_embedding = generic_embedding
+            else:
+                text_embedding = ff_gen_text_embedding
+
+            bb_video_tensor = bb_video.view(-1,c,h,w )
+            bb_image_embedding = ff_image_clip(bb_video_tensor)
+            bb_image_embedding = bb_image_embedding.view(b,t,-1)
+            bb_image_embedding = ff_temp_trans(bb_image_embedding)
+            bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,text_embedding,logit_scale)
+            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+
+            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
+        # ffimg fftxt
+        elif lambda_ff > 0:
+            
+            ff_gen_text_embedding = ff_text_clip(texts)
+            ff_video_tensor = ff_video.view(-1,c,h,w )
+            ff_image_embedding = ff_image_clip(ff_video_tensor)
+            ff_image_embedding = ff_image_embedding.view(b,t,-1)
+            ff_image_embedding = ff_temp_trans(ff_image_embedding)
+            ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
+            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
+            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
+
+            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) 
+        # bbimg fftxt generic
+        elif lambda_bb > 0:
+            
+            if use_generic:
+                bb_gen_text_embedding = ff_text_clip(bounded_texts)
+                bb_video_tensor = bb_video.view(-1,c,h,w )
+                bb_image_embedding = ff_image_clip(bb_video_tensor)
+                bb_image_embedding = bb_image_embedding.view(b,t,-1)
+                bb_image_embedding = ff_temp_trans(bb_image_embedding)
+                bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,generic_embedding,logit_scale)
+                bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+                bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+
+                image_embedding = bb_image_embedding
+
+                ff_gen_text_embedding = ff_text_clip(texts)
+                ff_video_tensor = ff_video.view(-1,c,h,w )
+                ff_image_embedding = ff_image_clip(ff_video_tensor)
+                ff_image_embedding = ff_image_embedding.view(b,t,-1)
+                ff_image_embedding = ff_temp_trans(ff_image_embedding)
+                ff_logits_per_image, ff_logits_per_text = create_logits(image_embedding,ff_gen_text_embedding,logit_scale)
+                ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
+                ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
+
+                kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
+            else:
+                ff_gen_text_embedding = ff_text_clip(texts)
+                text_embedding = ff_gen_text_embedding
+
+                bb_video_tensor = bb_video.view(-1,c,h,w )
+                bb_image_embedding = ff_image_clip(bb_video_tensor)
+                bb_image_embedding = bb_image_embedding.view(b,t,-1)
+                bb_image_embedding = ff_temp_trans(bb_image_embedding)
+                bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,text_embedding,logit_scale)
+                bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+                bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+                kl_loss = config.loss.text*((bb_loss_imgs+bb_loss_texts)/2) 
+
+        else:
+            raise ValueError("Error!")
+    elif lambda_enbb > 0:
+        # ffimg bbimg bbtxt
+        if lambda_ff > 0 and lambda_bb > 0:
+            bb_gen_text_embedding = ff_text_clip(bounded_texts)
+            bb_video_tensor = bb_video.view(-1,c,h,w )
+            bb_image_embedding = ff_image_clip(bb_video_tensor)
+            bb_image_embedding = bb_image_embedding.view(b,t,-1)
+            bb_image_embedding = ff_temp_trans(bb_image_embedding)
+            bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
+            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+
+            if use_generic:
+                text_embedding = generic
+            else:
+                text_embedding = bb_gen_text_embedding
+
+            ff_video_tensor = ff_video.view(-1,c,h,w )
+            ff_image_embedding = ff_image_clip(ff_video_tensor)
+            ff_image_embedding = ff_image_embedding.view(b,t,-1)
+            ff_image_embedding = ff_temp_trans(ff_image_embedding)
+            ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,text_embedding,logit_scale)
+            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
+            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
+
+            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
+        # ffimg bbtxt
+        elif lambda_ff > 0:
+            if use_generic:
+                ff_video_tensor = ff_video.view(-1,c,h,w )
+                ff_image_embedding = ff_image_clip(ff_video_tensor)
+                ff_image_embedding = ff_image_embedding.view(b,t,-1)
+                ff_image_embedding = ff_temp_trans(ff_image_embedding)
+                ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,generic_embedding,logit_scale)
+                ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
+                ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
+
+                image_embedding = ff_image_embedding
+
+                bb_gen_text_embedding = ff_text_clip(bounded_texts)
+                bb_logits_per_image, bb_logits_per_text = create_logits(image_embedding,bb_gen_text_embedding,logit_scale)
+                bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+                bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+
+                kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
+            else:
+                bb_gen_text_embedding = ff_text_clip(bounded_texts)
+                ff_video_tensor = ff_video.view(-1,c,h,w )
+                ff_image_embedding = ff_image_clip(ff_video_tensor)
+                ff_image_embedding = ff_image_embedding.view(b,t,-1)
+                ff_image_embedding = ff_temp_trans(ff_image_embedding)
+                ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,bb_gen_text_embedding,logit_scale)
+                ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
+                ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
+                kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2)
+
+        # bbimg bbtxt
+        elif lambda_bb > 0:
+            bb_gen_text_embedding = ff_text_clip(bounded_texts)
+            bb_video_tensor = bb_video.view(-1,c,h,w )
+            bb_image_embedding = ff_image_clip(bb_video_tensor)
+            bb_image_embedding = bb_image_embedding.view(b,t,-1)
+            bb_image_embedding = ff_temp_trans(bb_image_embedding)
+            bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
+            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
+            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
+            kl_loss = config.loss.image*((bb_loss_imgs + bb_loss_texts)/2)
+        else:
+            raise ValueError("Error!")
+    else:
+        raise ValueError("Error!")
+
 def train_classifier(
         # Models
         ff_image_clip, 
@@ -214,18 +450,6 @@ def train_classifier(
     clamp_with_grad = ClampWithGrad.apply
         
     if config.data.weighted_features.use:
-        # if config.data.weighted_features.learned:
-        #     lambda_bb = nn.Parameter(torch.ones(config.data.batch_size, 512, requires_grad=True, device=device))
-        #     lambda_ff = nn.Parameter(torch.ones(config.data.batch_size, 512, requires_grad=True, device=device))
-        #     lambda_enff = nn.Parameter(torch.ones(config.data.batch_size, 512, requires_grad=True, device=device))
-        #     lambda_enbb = nn.Parameter(torch.ones(config.data.batch_size, 512, requires_grad=True, device=device))
-        #     lambda_bb = lambda_bb.to(device=device, dtype=torch.float32)
-        #     lambda_ff = lambda_ff.to(device=device, dtype=torch.float32)
-        #     lambda_enff = lambda_enff.to(device=device, dtype=torch.float32)
-        #     lambda_enbb = lambda_enbb.to(device=device, dtype=torch.float32)
-        #     optimizer = _optimizer(config, clip_perceptor, ff_temp_trans, [lambda_bb, lambda_ff, lambda_enff, lambda_enbb])
-        #     lr_scheduler = _lr_scheduler(config, optimizer)
-        # else:
         lambda_bb = config.data.weights.lambda_bb
         lambda_ff = config.data.weights.lambda_ff
         lambda_enff = config.data.weights.lambda_enff
@@ -265,7 +489,6 @@ def train_classifier(
             ff_video = ff_video.to(device)
             nonaug_images = nonaug_images.to(device)
             bbs = bbs.to(device)
-            list_id = list_id.to(device)
 
             bb_video = bb_video.view((-1,config.data.num_segments,3)+bb_video.size()[-2:])
             b,t,c,h,w = bb_video.size()
@@ -273,11 +496,20 @@ def train_classifier(
             
             text_id = numpy.random.randint(num_text_aug,size=len(list_id))
             token_texts = torch.stack([text_dict[j][i,:] for i,j in zip(list_id,text_id)])
-            real_texts = [text_aug_dict[j][i] for i,j in zip(list_id,text_id)]
+    
+            real_texts = []
+            for i, j in zip(list_id, text_id):
+                
+                real_texts.append(text_aug_dict[j][i])
+                # real_texts = [text_aug_dict[j][i] for i,j in zip(list_id,text_id)]
+                # except:
+                #     raise ValueError(list_id.shape, len(text_aug_dict.keys()), j, i, len(text_aug_dict[list(text_aug_dict.keys())[0]]))
+            list_id = list_id.to(device)
 
             if not config.data.florence.activate:
                 texts = token_texts.to(device)
-            elif config.data.florence.use_bounded_text:
+            # if there are bounding box texts being usd lambda_enbb will be greater than 0
+            elif config.data.weights.lambda_enbb > 0:
                 with torch.no_grad():
                     # if ff_caption == None:
                     caption = False
@@ -290,6 +522,7 @@ def train_classifier(
                     #     bounded_texts = run_region_desc_florence(nonaug_images, bbs, flo_model, flo_processor, real_texts, config)
                     texts  = final_text.to(device)
                     bounded_texts = bounded_text.to(device)
+            # if florence not active and lambda_enbb is 0 then that means just full frame texts
             else:
                 with torch.no_grad():
                     # if ff_caption == None:
@@ -304,302 +537,97 @@ def train_classifier(
             ground_truth = torch.tensor(gen_label(list_id),device=device) 
             logit_scale = clip_perceptor.logit_scale.exp()
             use_generic = False
-            if config.data.loss_type == 0:
-
-                if lambda_enbb > 0 and lambda_enff > 0:
-                    # ffimg bbimg fftxt bbtxt
-                    if lambda_ff > 0 and lambda_bb > 0:
-                        ff_gen_text_embedding = ff_text_clip(texts)
-                        ff_video_tensor = ff_video.view(-1,c,h,w )
-                        ff_image_embedding = ff_image_clip(ff_video_tensor)
-                        ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                        ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                        ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
-                        ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
-                        ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
-
-                        bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                        bb_video_tensor = bb_video.view(-1,c,h,w )
-                        bb_image_embedding = ff_image_clip(bb_video_tensor)
-                        bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                        bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                        bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
-                        bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                        bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-
-                        kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
-                    
-                    # ffimg fftxt bbtxt
-                    elif lambda_ff > 0:
-                        ff_gen_text_embedding = ff_text_clip(texts)
-                        ff_video_tensor = ff_video.view(-1,c,h,w )
-                        ff_image_embedding = ff_image_clip(ff_video_tensor)
-                        ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                        ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                        ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
-                        ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
-                        ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
-
-                        image_embedding = ff_image_embedding
-
-                        bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                        bb_logits_per_image, bb_logits_per_text = create_logits(image_embedding,bb_gen_text_embedding,logit_scale)
-                        bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                        bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-
-
-                        kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
-                    # bbimg fftxt bbtxt
-                    elif lambda_bb > 0:
-                        bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                        bb_video_tensor = bb_video.view(-1,c,h,w )
-                        bb_image_embedding = ff_image_clip(bb_video_tensor)
-                        bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                        bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                        bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
-                        bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                        bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-
-                        image_embedding = bb_image_embedding
-                        
-                        ff_gen_text_embedding = ff_text_clip(texts)
-                        ff_logits_per_image, ff_logits_per_text = create_logits(image_embedding,ff_gen_text_embedding,logit_scale)
-                        ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
-                        ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
-
-
-                        kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
-                    else: 
-                        raise ValueError("Error!")
-                elif lambda_enff > 0:
-                    # ffimg bbimg fftxt
-                    if lambda_ff > 0 and lambda_bb > 0:
-                        
-                        ff_gen_text_embedding = ff_text_clip(texts)
-                        ff_video_tensor = ff_video.view(-1,c,h,w )
-                        ff_image_embedding = ff_image_clip(ff_video_tensor)
-                        ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                        ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                        ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
-                        ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
-                        ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
-
-                        if use_generic:
-                            text_embedding = generic_embedding
-                        else:
-                            text_embedding = ff_gen_text_embedding
-
-                        bb_video_tensor = bb_video.view(-1,c,h,w )
-                        bb_image_embedding = ff_image_clip(bb_video_tensor)
-                        bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                        bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                        bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,text_embedding,logit_scale)
-                        bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                        bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-
-                        kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
-                    # ffimg fftxt
-                    elif lambda_ff > 0:
-                        
-                        ff_gen_text_embedding = ff_text_clip(texts)
-                        ff_video_tensor = ff_video.view(-1,c,h,w )
-                        ff_image_embedding = ff_image_clip(ff_video_tensor)
-                        ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                        ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                        ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,ff_gen_text_embedding,logit_scale)
-                        ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
-                        ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
-
-                        kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) 
-                    # bbimg fftxt generic
-                    elif lambda_bb > 0:
-                        
-                        if use_generic:
-                            bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                            bb_video_tensor = bb_video.view(-1,c,h,w )
-                            bb_image_embedding = ff_image_clip(bb_video_tensor)
-                            bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                            bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                            bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,generic_embedding,logit_scale)
-                            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-
-                            image_embedding = bb_image_embedding
-
-                            ff_gen_text_embedding = ff_text_clip(texts)
-                            ff_video_tensor = ff_video.view(-1,c,h,w )
-                            ff_image_embedding = ff_image_clip(ff_video_tensor)
-                            ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                            ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                            ff_logits_per_image, ff_logits_per_text = create_logits(image_embedding,ff_gen_text_embedding,logit_scale)
-                            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_imag.dtype))
-                            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_tex.dtype))
-
-                            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
-                        else:
-                            ff_gen_text_embedding = ff_text_clip(texts)
-                            text_embedding = ff_gen_text_embedding
-
-                            bb_video_tensor = bb_video.view(-1,c,h,w )
-                            bb_image_embedding = ff_image_clip(bb_video_tensor)
-                            bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                            bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                            bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,text_embedding,logit_scale)
-                            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-                            kl_loss = config.loss.text*((bb_loss_imgs+bb_loss_texts)/2) 
-
-                    else:
-                        raise ValueError("Error!")
-                elif lambda_enbb > 0:
-                    # ffimg bbimg bbtxt
-                    if lambda_ff > 0 and lambda_bb > 0:
-                        bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                        bb_video_tensor = bb_video.view(-1,c,h,w )
-                        bb_image_embedding = ff_image_clip(bb_video_tensor)
-                        bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                        bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                        bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
-                        bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                        bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-
-                        if use_generic:
-                            text_embedding = generic
-                        else:
-                            text_embedding = bb_gen_text_embedding
-
-                        ff_video_tensor = ff_video.view(-1,c,h,w )
-                        ff_image_embedding = ff_image_clip(ff_video_tensor)
-                        ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                        ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                        ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,text_embedding,logit_scale)
-                        ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
-                        ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
-
-                        kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
-                    # ffimg bbtxt
-                    elif lambda_ff > 0:
-                        if use_generic:
-                            ff_video_tensor = ff_video.view(-1,c,h,w )
-                            ff_image_embedding = ff_image_clip(ff_video_tensor)
-                            ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                            ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                            ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,generic_embedding,logit_scale)
-                            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
-                            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
-
-                            image_embedding = ff_image_embedding
-
-                            bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                            bb_logits_per_image, bb_logits_per_text = create_logits(image_embedding,bb_gen_text_embedding,logit_scale)
-                            bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                            bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-
-                            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2) + config.loss.text*((bb_loss_imgs + bb_loss_texts)/2)
-                        else:
-                            bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                            ff_video_tensor = ff_video.view(-1,c,h,w )
-                            ff_image_embedding = ff_image_clip(ff_video_tensor)
-                            ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                            ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                            ff_logits_per_image, ff_logits_per_text = create_logits(ff_image_embedding,bb_gen_text_embedding,logit_scale)
-                            ff_loss_imgs = loss_img(ff_logits_per_image,ground_truth.to(dtype=ff_logits_per_image.dtype))
-                            ff_loss_texts = loss_txt(ff_logits_per_text,ground_truth.to(dtype=ff_logits_per_text.dtype))
-                            kl_loss = config.loss.image*((ff_loss_imgs + ff_loss_texts)/2)
-
-                    # bbimg bbtxt
-                    elif lambda_bb > 0:
-                        bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                        bb_video_tensor = bb_video.view(-1,c,h,w )
-                        bb_image_embedding = ff_image_clip(bb_video_tensor)
-                        bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                        bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                        bb_logits_per_image, bb_logits_per_text = create_logits(bb_image_embedding,bb_gen_text_embedding,logit_scale)
-                        bb_loss_imgs = loss_img(bb_logits_per_image, ground_truth.to(dtype=bb_logits_per_image.dtype))
-                        bb_loss_texts = loss_txt(bb_logits_per_text,ground_truth.to(dtype=bb_logits_per_text.dtype))
-                        kl_loss = config.loss.image*((bb_loss_imgs + bb_loss_texts)/2)
-                    else:
-                        raise ValueError("Error!")
-                else:
-                    raise ValueError("Error!")
+            # if config.data.loss_type == 0:
+            #     run_with_loss_type(lambda_enbb,
+            #                        lambda_enff,
+            #                        lambda_ff,
+            #                        lambda_bb,
+            #                        texts,
+            #                        ff_video,
+            #                        bb_video,
+            #                        b, c, h, w, t,
+            #                        logit_scale,
+            #                        ground_truth,
+            #                        bounded_texts,
+            #                        config)
+            # else:
+            # Process Video Embeddings for BB and Original (full frame)
+            if lambda_bb > 0:
+                bb_video_tensor = bb_video.view(-1,c,h,w )
+                bb_image_embedding = ff_image_clip(bb_video_tensor)
+                bb_image_embedding = bb_image_embedding.view(b,t,-1)
+                bb_image_embedding = ff_temp_trans(bb_image_embedding)
             else:
-                # Process Video Embeddings for BB and Original (full frame)
-                if lambda_bb > 0:
-                    bb_video_tensor = bb_video.view(-1,c,h,w )
-                    bb_image_embedding = ff_image_clip(bb_video_tensor)
-                    bb_image_embedding = bb_image_embedding.view(b,t,-1)
-                    bb_image_embedding = ff_temp_trans(bb_image_embedding)
-                else:
-                    bb_image_embedding = torch.zeros(b,512)
-                    bb_image_embedding = bb_image_embedding.to(device=bb_video.device, dtype=bb_video.dtype)
+                bb_image_embedding = torch.zeros(b,512)
+                bb_image_embedding = bb_image_embedding.to(device=bb_video.device, dtype=bb_video.dtype)
 
 
-                if lambda_ff > 0:
-                    ff_video_tensor = ff_video.view(-1,c,h,w )
-                    ff_image_embedding = ff_image_clip(ff_video_tensor)
-                    ff_image_embedding = ff_image_embedding.view(b,t,-1)
-                    ff_image_embedding = ff_temp_trans(ff_image_embedding)
-                else:
-                    ff_image_embedding = torch.zeros(b,512)
-                    ff_image_embedding = ff_image_embedding.to(device=bb_video.device, dtype=bb_video.dtype)
-                
-                # Process Text Embeddings
-                if lambda_enff > 0:
-                    ff_gen_text_embedding = ff_text_clip(texts)
-                else:
-                    ff_gen_text_embedding = torch.zeros(b, 512)
-                    ff_gen_text_embedding = ff_gen_text_embedding.to(device=texts.device, dtype=bb_video.dtype)
+            if lambda_ff > 0:
+                ff_video_tensor = ff_video.view(-1,c,h,w )
+                ff_image_embedding = ff_image_clip(ff_video_tensor)
+                ff_image_embedding = ff_image_embedding.view(b,t,-1)
+                ff_image_embedding = ff_temp_trans(ff_image_embedding)
+            else:
+                ff_image_embedding = torch.zeros(b,512)
+                ff_image_embedding = ff_image_embedding.to(device=bb_video.device, dtype=bb_video.dtype)
+            
+            # Process Text Embeddings
+            if lambda_enff > 0:
+                ff_gen_text_embedding = ff_text_clip(texts)
+            else:
+                ff_gen_text_embedding = torch.zeros(b, 512)
+                ff_gen_text_embedding = ff_gen_text_embedding.to(device=texts.device, dtype=bb_video.dtype)
 
-                if config.data.florence.use_bounded_text and lambda_enbb > 0:
-                    bb_gen_text_embedding = ff_text_clip(bounded_texts)
-                else:
-                    bb_gen_text_embedding = torch.zeros(b, 512)
-                    bb_gen_text_embedding = bb_gen_text_embedding.to(device=texts.device, dtype=bb_video.dtype)
+            if lambda_enbb > 0:
+                bb_gen_text_embedding = ff_text_clip(bounded_texts)
+            else:
+                bb_gen_text_embedding = torch.zeros(b, 512)
+                bb_gen_text_embedding = bb_gen_text_embedding.to(device=texts.device, dtype=bb_video.dtype)
 
 
-                if config.network.fix_text:
-                    ff_gen_text_embedding.detach_()
-                    # bb_text_embedding.detach_()
-                if lambda_ff > 0 and lambda_bb > 0:
-                    image_embedding = lambda_bb*bb_image_embedding    + lambda_ff*ff_image_embedding
-                elif lambda_bb > 0:
-                    image_embedding = lambda_bb*bb_image_embedding
-                elif lambda_ff > 0:
-                    image_embedding = lambda_ff*ff_image_embedding
-                
-                # Add here the generic and captioning
-                if lambda_enbb > 0 and lambda_enff > 0:
-                    text_embedding  = lambda_enff*ff_gen_text_embedding + lambda_enbb*bb_gen_text_embedding
-                elif lambda_enbb > 0:
-                    text_embedding  = lambda_enbb*bb_gen_text_embedding
-                elif lambda_enff > 0:
-                    text_embedding  = lambda_enff*ff_gen_text_embedding
-                
+            if config.network.fix_text:
+                ff_gen_text_embedding.detach_()
+                # bb_text_embedding.detach_()
+            if lambda_ff > 0 and lambda_bb > 0:
+                image_embedding = lambda_bb*bb_image_embedding    + lambda_ff*ff_image_embedding
+            elif lambda_bb > 0:
+                image_embedding = lambda_bb*bb_image_embedding
+            elif lambda_ff > 0:
+                image_embedding = lambda_ff*ff_image_embedding
+            
+            # Add here the generic and captioning
+            if lambda_enbb > 0 and lambda_enff > 0:
+                text_embedding  = lambda_enff*ff_gen_text_embedding + lambda_enbb*bb_gen_text_embedding
+            elif lambda_enbb > 0:
+                text_embedding  = lambda_enbb*bb_gen_text_embedding
+            elif lambda_enff > 0:
+                text_embedding  = lambda_enff*ff_gen_text_embedding
+            
 
-                logits_per_image, logits_per_text = create_logits(image_embedding,text_embedding,logit_scale)
-                
-                loss_imgs = loss_img(logits_per_image,ground_truth.to(dtype=logits_per_image.dtype))
-                loss_texts = loss_txt(logits_per_text,ground_truth.to(dtype=logits_per_text.dtype))
-                # loss_flo = outputs.loss
-                kl_loss = config.loss.image*loss_imgs + config.loss.text*loss_texts #+ config.data.mu*loss_flo
-                
+            logits_per_image, logits_per_text = create_logits(image_embedding,text_embedding,logit_scale)
+            
+            loss_imgs = loss_img(logits_per_image,ground_truth.to(dtype=logits_per_image.dtype))
+            loss_texts = loss_txt(logits_per_text,ground_truth.to(dtype=logits_per_text.dtype))
+            # loss_flo = outputs.loss
+            kl_loss = config.loss.image*loss_imgs + config.loss.text*loss_texts 
+            
 
-                if config.data.weights.gamma > 0:
-                    text_inputs = classes.to(device)
-                    generic_features = ff_text_clip(text_inputs)
-                    logits_per_image, logits_per_text = create_logits(image_embedding,generic_features,100)
-                    similarity = calculate_similarity(logits_per_image, b, num_text_aug)
-                    loss_ce = cross_entropy(similarity, list_id)
+            # if config.data.weights.gamma > 0:
+            #     text_inputs = classes.to(device)
+            #     generic_features = ff_text_clip(text_inputs)
+            #     logits_per_image, logits_per_text = create_logits(image_embedding,generic_features,100)
+            #     similarity = calculate_similarity(logits_per_image, b, num_text_aug)
+            #     loss_ce = cross_entropy(similarity, list_id)
 
-                wandb.log({"train_loss_imgs":  loss_imgs})
-                wandb.log({"train_loss_texts": loss_texts})
+            wandb.log({"train_loss_imgs":  loss_imgs})
+            wandb.log({"train_loss_texts": loss_texts})
                 
 
             total_loss = kl_loss 
             running_kl += kl_loss.item()
-            if config.data.weights.gamma > 0:
-                total_loss += config.data.weights.gamma*loss_ce.item()
-                running_ce += ce_loss.item()
+            # if config.data.weights.gamma > 0:
+            #     total_loss += config.data.weights.gamma*loss_ce.item()
+            #     running_ce += ce_loss.item()
             
             wandb.log({"lr": optimizer.param_groups[0]['lr']})
             total_loss.backward()
@@ -637,10 +665,8 @@ def train_classifier(
         best_prec1 = max(prec1, best_prec1)
         
         log_str = f'Testing: {prec1}/{best_prec1}, Avg Loss KL: {running_kl/len(train_loader)}'
-        if config.data.weights.gamma > 0:
-            log_str += f', Avg Loss CE: {running_ce/len(train_loader)}'
-        # if config.data.weights.mu > 0:
-        #     log_str += f', Avg Flo Loss: {running_flo/len(train_loader)}'
+        # if config.data.weights.gamma > 0:
+        #     log_str += f', Avg Loss CE: {running_ce/len(train_loader)}'
         
         print(log_str)
         print('Saving:')
@@ -729,42 +755,65 @@ def main():
         images = torch.stack(images) 
         labels = torch.tensor(labels)
         nonaug_images = torch.stack(nonaug_images)
+
         bbs = torch.stack(bbs)
         return cropped_videos, images, nonaug_images, bbs, labels
 
-    train_data = EducationBBDataset(
-                    config.data.train_list,
-                    config.data.label_list,
-                    num_segments=config.data.num_segments,
-                    image_tmpl=config.data.image_tmpl,
-                    random_shift=config.data.random_shift,
-                    transform=transform_train,
-                    label_box=config.data.label_box,
-                    caption_level=config.data.florence.caption_level)
-    train_loader = DataLoader(
-                    train_data,
-                    batch_size=config.data.batch_size,
-                    num_workers=config.data.workers,
-                    shuffle=True,
-                    pin_memory=False,
-                    drop_last=True, 
-                    collate_fn=collate_fn)
-    val_data = EducationBBDataset(
-                    config.data.val_list,
-                    config.data.label_list, 
-                    random_shift=False,
-                    num_segments=config.data.num_segments,
-                    image_tmpl=config.data.image_tmpl,
-                    transform=transform_val,
-                    label_box=config.data.label_box)
-    val_loader = DataLoader(
-                    val_data,
-                    batch_size=config.data.batch_size,
-                    num_workers=config.data.workers,
-                    shuffle=False,
-                    pin_memory=False,
-                    drop_last=True,
-                    collate_fn=collate_fn)
+    if 'education' in config.data.dataset:
+        train_data = EducationBBDataset(
+                        config.data.train_list,
+                        config.data.label_list,
+                        num_segments=config.data.num_segments,
+                        image_tmpl=config.data.image_tmpl,
+                        random_shift=config.data.random_shift,
+                        transform=transform_train,
+                        label_box=config.data.label_box,
+                        caption_level=config.data.florence.caption_level)
+        train_loader = DataLoader(
+                        train_data,
+                        batch_size=config.data.batch_size,
+                        num_workers=config.data.workers,
+                        shuffle=True,
+                        pin_memory=False,
+                        drop_last=True, 
+                        collate_fn=collate_fn)
+        val_data = EducationBBDataset(
+                        config.data.val_list,
+                        config.data.label_list, 
+                        random_shift=False,
+                        num_segments=config.data.num_segments,
+                        image_tmpl=config.data.image_tmpl,
+                        transform=transform_val,
+                        label_box=config.data.label_box)
+        val_loader = DataLoader(
+                        val_data,
+                        batch_size=config.data.batch_size,
+                        num_workers=config.data.workers,
+                        shuffle=False,
+                        pin_memory=False,
+                        drop_last=True,
+                        collate_fn=collate_fn)
+    elif 'ucf' in config.data.dataset:
+        train_data = UCF10124Dataset('./ucf101_24/UCF101_v2', './ucf101_24/UCF101_v2/UCF101v2-GT.pkl', transforms=transform_train)
+        train_loader = DataLoader(
+                        train_data,
+                        batch_size=config.data.batch_size,
+                        num_workers=config.data.workers,
+                        shuffle=True,
+                        pin_memory=False,
+                        drop_last=True, 
+                        collate_fn=collate_fn)
+        val_data = UCF10124Dataset('./ucf101_24/UCF101_v2', './ucf101_24/UCF101_v2/UCF101v2-GT.pkl', transforms=transform_train, split='test')
+        val_loader = DataLoader(
+                        val_data,
+                        batch_size=config.data.batch_size,
+                        num_workers=config.data.workers,
+                        shuffle=False,
+                        pin_memory=False,
+                        drop_last=True, 
+                        collate_fn=collate_fn)
+    else:
+        raise TypeError(f'The dataset {config.data.dataset} is unknown to the SemanticBox model')
 
 
     if device == "cpu":

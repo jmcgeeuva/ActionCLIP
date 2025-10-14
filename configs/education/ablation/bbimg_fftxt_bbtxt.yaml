@@ -1,5 +1,5 @@
 resume:
-pretrain: 
+pretrain: /sfs/weka/scratch/tkg5kq/sandbox/BoundedCLIP/exp/paper_results/final/20250524_214748_bbimg_fftxt_bbtxt/model_best.pt
 test_name: generic_test
 seed: 1737328734
 prompt: './prompts/generic_prompts.txt'
@@ -13,10 +13,10 @@ data:
     num_segments: 8
     seg_length: 1
     batch_size: 32
-    workers: 16
+    workers: 12
     num_classes: 6
-    image_tmpl: '{:04d}.jpg'
     k: 2
+    image_tmpl: '{:04d}.jpg'
     # train_list: './splits/split_reduced/trainnewsplit01.txt'
     # val_list: './splits/split_reduced/testnewsplit01.txt' #
     train_list: './splits/split/trainsplit00.txt'

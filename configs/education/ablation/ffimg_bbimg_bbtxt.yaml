@@ -1,11 +1,14 @@
 resume: 
-pretrain: 
+pretrain: /sfs/weka/scratch/tkg5kq/sandbox/BoundedCLIP/exp/paper_results/final/20250524_152856_ffimg_bbimg_bbtxt/model_best.pt
 test_name: generic_test
 seed: 1737328734
 prompt: './prompts/generic_prompts.txt'
 use_calc_norm: False
+just:
+    image: False
+    text: False
 loss:
-    image: .5
+    image: 1
     text: .5
 data:
     dataset: education6
@@ -13,7 +16,7 @@ data:
     num_segments: 8
     seg_length: 1
     batch_size: 32
-    workers: 16
+    workers: 12
     num_classes: 6
     k: 2
     image_tmpl: '{:04d}.jpg'
@@ -24,9 +27,8 @@ data:
     label_list: './splits/split_reduced/education_6_labels.csv'
     index_bias: 1
     input_size: 224
-    use_definitions: True
     florence:
-        activate: True
+        activate: False # should be True
         use_bounded_text: True
         random_frame: False
         generated_test: False
@@ -43,14 +45,14 @@ data:
         lambda_ff: .5
         lambda_bb: .5
         # Text weight
-        lambda_enff: 0
-        lambda_enbb: 1
+        lambda_enff: 1
+        lambda_enbb: 0
         # Florence weight
         mu: 0
         gamma: 0
     label_box: False # if False use teacher
 network:
-    arch: ViT-B/16  #ViT-B/32 ViT-B/16
+    arch: ViT-B/32  #ViT-B/32 ViT-B/16
     init: True
     tsm: False
     drop_out: 0.0 

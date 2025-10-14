@@ -1,12 +1,15 @@
 resume: #/sfs/weka/scratch/tkg5kq/sandbox/BoundedCLIP/exp/clip_k400/ViT-B/32/education6/20250317_133011/last_model.pt
-pretrain: 
+pretrain: /sfs/weka/scratch/tkg5kq/sandbox/BoundedCLIP/exp/paper_results/final/20250524_124152_ffimg_fftxt/model_best.pt
 test_name: generic_test
 seed: 1737328734
 prompt: './prompts/generic_prompts.txt'
 use_calc_norm: False
+just:
+    image: False
+    text: False
 loss:
-    image: 1
-    text: 1
+    image: .5
+    text: .5
 data:
     dataset: education6
     modality: RGB
@@ -15,7 +18,6 @@ data:
     batch_size: 32
     workers: 16
     num_classes: 6
-    loss_type: 0
     k: 2
     image_tmpl: '{:04d}.jpg'
     # train_list: './splits/split_reduced/trainnewsplit01.txt'

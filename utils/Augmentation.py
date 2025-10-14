@@ -75,7 +75,8 @@ def get_augmentation(training, config):
     scale_size = config.data.input_size * 256 // 224
     if training:
         unique = torchvision.transforms.Compose([
-                                                 GroupMultiScaleCrop(config.data.input_size, [1, .875, .75, .66]),
+                                                 GroupMultiScale(config.data.input_size, [1, .875, .75, .66]),
+                                                #  GroupMultiScaleCrop(config.data.input_size, [1, .875, .75, .66]),
                                                  GroupRandomHorizontalFlip(is_sth='some' in config.data.dataset),
                                                 #  GroupRandomColorJitter(p=0.8, brightness=0.4, contrast=0.4,
                                                 #                         saturation=0.2, hue=0.1),

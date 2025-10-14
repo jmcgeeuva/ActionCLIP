@@ -219,7 +219,10 @@ class GroupNormalize(object):
 
     def __call__(self, data):
         tensor, img_mask = data['video'], data['mask']
-        tensor = tensor.view((-1,8,3)+tensor.size()[-2:])
+        try:
+            tensor = tensor.view((-1,8,3)+tensor.size()[-2:])
+        except:
+            raise ValueError(tensor.shape)
         img_group = self.normalize(tensor)
         
         if img_mask != None:
@@ -311,6 +314,32 @@ class GroupFCSample(object):
                 normal_group.append(crop)
             oversample_group.extend(normal_group)
         return oversample_group
+
+
+class GroupMultiScale(object):
+
+    def __init__(self, input_size, scales=None, max_distort=1, fix_crop=True, more_fix_crop=True):
+        self.scales = scales if scales is not None else [1, .875, .75, .66]
+        self.max_distort = max_distort
+        self.fix_crop = fix_crop
+        self.more_fix_crop = more_fix_crop
+        self.input_size = input_size if not isinstance(input_size, int) else [input_size, input_size]
+        self.interpolation = Image.BILINEAR
+
+    def multiscale_crop(self, img_group):
+        im_size = img_group[0].size
+        ret_img_group = [img.resize((self.input_size[0], self.input_size[1]), self.interpolation)
+                         for img in img_group]
+        return ret_img_group
+
+    def __call__(self, data):
+        img_group, img_mask = data['video'], data['mask']
+
+        ret_img_group = self.multiscale_crop(img_group)
+        if img_mask != None:
+            img_mask = self.multiscale_crop(img_mask)
+
+        return {'video': ret_img_group, 'mask': img_mask}
 
 
 class GroupMultiScaleCrop(object):

@@ -1,5 +1,5 @@
 resume:
-pretrain: 
+pretrain: /sfs/weka/scratch/tkg5kq/sandbox/BoundedCLIP/exp/paper_results/final/20250524_171439_all/model_best.pt
 test_name: generic_test
 seed: 1737328734
 prompt: './prompts/generic_prompts.txt'
@@ -15,7 +15,6 @@ data:
     batch_size: 32
     workers: 12
     num_classes: 6
-    loss_type: 0
     k: 2
     image_tmpl: '{:04d}.jpg'
     # train_list: './splits/split_reduced/trainnewsplit01.txt'
@@ -45,9 +44,6 @@ data:
         # Text weight
         lambda_enff: .5
         lambda_enbb: .5
-        # Florence weight
-        mu: 0
-        gamma: 0
     label_box: False # if False use teacher
 network:
     arch: ViT-B/32  #ViT-B/32 ViT-B/16
@@ -58,6 +54,7 @@ network:
     type: clip_k400
     sim_header: "Transf"  #Transf   meanP  LSTM Conv_1D Transf_cls
     joint: False
+    describe:
 solver:
     type: cosine
     epochs: 50
