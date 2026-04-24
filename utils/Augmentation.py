@@ -13,7 +13,7 @@ class GroupTransform(object):
     def __call__(self, img_group):
         return [self.worker(img) for img in img_group]
 
-def get_augmentation(training, config):
+def get_augmentation(training, config, use_norm=True):
     input_mean = [0.48145466, 0.4578275, 0.40821073]
     input_std = [0.26862954, 0.26130258, 0.27577711]
     scale_size = config.data.input_size * 256 // 224
@@ -32,10 +32,12 @@ def get_augmentation(training, config):
                                                  GroupCenterCrop(config.data.input_size)])
 
     common = torchvision.transforms.Compose([Stack(roll=False),
-                                             ToTorchFormatTensor(div=True),
-                                             GroupNormalize(input_mean,
-                                                            input_std)])
-    return torchvision.transforms.Compose([unique, common])
+                                             ToTorchFormatTensor(div=True)])
+    norm = torchvision.transforms.Compose([GroupNormalize(input_mean, input_std)])
+    if use_norm:
+        return torchvision.transforms.Compose([unique, common, norm])
+    else:
+        return torchvision.transforms.Compose([unique, common])
 
 def randAugment(transform_train,config):
     print('Using RandAugment!')
