@@ -1,7 +1,7 @@
 resume: 
 pretrain: 
 test_name: generic_test
-seed: 1737328734
+seed: 
 prompt: './prompts/generic_prompts.txt'
 use_calc_norm: False
 loss:

@@ -1,5 +1,6 @@
-resume: 
-pretrain: 
+pretrain: /scratch/tkg5kq/survey/chkt/actionclip/vit-b-16-16f/vit-b-16-16f.pt
+resume:
+# resume: /scratch/tkg5kq/SemanticBox/exp/clip_k400/ViT-B/16/education6/20260514_122538/last_model.pt
 test_name: generic_test
 seed: 1737328734
 prompt: './prompts/generic_prompts.txt'
@@ -12,7 +13,7 @@ data:
     modality: RGB
     num_segments: 8
     seg_length: 1
-    batch_size: 32
+    batch_size: 8
     workers: 8
     num_classes: 6
     k: 2
@@ -78,4 +79,4 @@ solver:
     f_ratio: 10
 logging:
     print_freq: 10
-    eval_freq: 2
+    eval_freq: 5

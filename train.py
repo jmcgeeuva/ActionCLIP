@@ -239,6 +239,7 @@ def train_classifier(
 
     ################### Train Classifier ####################################
     # scaler = torch.cuda.amp.GradScaler()
+    prec1 = best_prec1
     for epoch in range(start_epoch, config.solver.epochs):
         ff_image_clip.train()
         ff_text_clip.train()
@@ -613,7 +614,7 @@ def train_classifier(
 
             # scaler.update()
 
-        if epoch % config.logging.eval_freq == 0:  # and epoch>0
+        if (epoch+1) % config.logging.eval_freq == 0:  # and epoch>0
             prec1 = validate(
                              epoch,
                              val_loader, 
