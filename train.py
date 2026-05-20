@@ -137,10 +137,12 @@ def main():
     lr_scheduler = _lr_scheduler(config, optimizer)
 
     best_prec1 = 0.0
+    prec1 = best_prec1 - 1
     if config.solver.evaluate:
         prec1 = validate(start_epoch,val_loader, classes, device, model,fusion_model, config,num_text_aug)
         return
 
+    raise ValueError(sum(p.numel() for p in model.parameters() if p.requires_grad))
     for k,v in model.named_parameters():
         print('{}: {}'.format(k, v.requires_grad))
     for epoch in range(start_epoch, config.solver.epochs):

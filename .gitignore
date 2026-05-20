@@ -1,5 +1,8 @@
 __pycache__/
 *.py[cod]
+**/logs/**
+confusion.txt
+generic_test.png
 *$py.class
 *.egg-info
 .pytest_cache

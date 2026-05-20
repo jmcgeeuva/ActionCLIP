@@ -149,7 +149,7 @@ def validate(epoch, val_loader, classes, device, model, fusion_model, config, nu
             similarity = similarity.view(b, num_text_aug, -1).softmax(dim=-1)
             similarity = similarity.mean(dim=1, keepdim=False)
             values_1, indices_1 = similarity.topk(1, dim=-1)
-            values_5, indices_5 = similarity.topk(1, dim=-1)
+            values_5, indices_5 = similarity.topk(2, dim=-1)
             num += b
             for i in range(b):
                 if indices_1[i] == class_id[i]:
